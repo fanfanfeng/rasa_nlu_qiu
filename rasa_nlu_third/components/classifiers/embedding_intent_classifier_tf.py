@@ -14,14 +14,15 @@ except ImportError:
 
 from typing import Any, Optional, Text
 
-from rasa.nlu.extractors import EntityExtractor
+
+from rasa.nlu.components import Component
 from rasa.nlu.model import Metadata
 from rasa.nlu.training_data import Message
 
 
-from rasa_nlu_third.tf_models.ner.params import Params
-from rasa_nlu_third.run_local.ner.train import train
-from rasa_nlu_third.tf_models.ner.pb_loader import Meta_Load
+from rasa_nlu_third.tf_models.classifiers.params import Params
+from rasa_nlu_third.run_local.classifiers.train import train
+from rasa_nlu_third.tf_models.classifiers.pb_loader import Meta_Load
 import shutil
 
 
@@ -41,21 +42,18 @@ class DictToObject(object):
         self.__dict__.update(dict)
 
 
-class TfEntityExtractor(EntityExtractor):
-    name = "TfEntityExtractor"
+class EmbeddingIntentClassifierTf(Component):
+    name = "EmbeddingIntentClassifierTf"
 
-    provides = ["entities"]
+    provides = ['intent','intent_ranking']
 
     requires = []
 
     def __init__(self,component_config=None,pb_meta=None):
-        super(TfEntityExtractor, self).__init__(component_config)
+        super(EmbeddingIntentClassifierTf, self).__init__(component_config)
 
         self.component_config = component_config
         self.pb_meta = pb_meta
-
-    def normal_train(self,params):
-        self.component_config['pb_path'] = train(params)
 
 
     def train(self, training_data, config, **kwargs):
@@ -67,21 +65,22 @@ class TfEntityExtractor(EntityExtractor):
     def process(self, message, **kwargs):
         # type: (Message, **Any) -> None
         if message.get('triedTree_match',0) == 0:
-            extracted = self.pb_meta.predict(message.text)
-            message.set("entities", message.get("entities", []) + extracted['entities'], add_to_output=True)
+            intent_ranking,intent = self.pb_meta.predict(message.text)
+            message.set("intent", intent, add_to_output=True)
+            #message.set("intent_ranking", intent_ranking, add_to_output=True)
 
     @classmethod
     def load(cls,
              meta,
              model_dir=None,  # type: Text
              model_metadata=None,  # type: Metadata
-             cached_component=None,  # type: Optional[CRFEntityExtractor]
+             cached_component=None,  # type: Optional[Component]
              **kwargs  # type: **Any
              ):
         if model_dir:
             save_model_path = os.path.join(model_dir, cls.name)
             pb_meta_load = Meta_Load(model_dir=save_model_path,use_bert=meta['use_bert'],max_sentence_length=meta['max_sentence_length'])
-            return TfEntityExtractor(component_config=meta,pb_meta=pb_meta_load)
+            return EmbeddingIntentClassifierTf(component_config=meta,pb_meta=pb_meta_load)
 
     def persist(self,filename,model_dir):
         save_model_path = os.path.join(model_dir,self.name)
@@ -95,6 +94,6 @@ class TfEntityExtractor(EntityExtractor):
             for word in self.vocab_list:
                 fwrite.write(word + "\n")
 
-        save_pb_path = os.path.join(save_model_path,'ner.pb')
+        save_pb_path = os.path.join(save_model_path,'classify.pb')
         shutil.copy(self.component_config['pb_path'],save_pb_path)
-        return {"ner_file":save_pb_path}
+        return {"classifier_file":save_pb_path}

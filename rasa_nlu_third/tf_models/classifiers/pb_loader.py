@@ -2,15 +2,14 @@
 import os
 
 import numpy as np
-from rasa_nlu_third.utils.ner_data_utils import result_to_json_IBOES
 
-from rasa_nlu_third.tf_models.ner.base_ner_model import BasicNerModel
+from rasa_nlu_third.tf_models.classifiers.base_classify_model import BaseClassifyModel
 
 
 class Meta_Load():
     def __init__(self,model_dir,use_bert=False,max_sentence_length=None):
-        pb_file_path = os.path.join(model_dir, 'ner.pb')
-        self.sess, self.input_node,self.input_mask_node, self.output_node = BasicNerModel.load_model_from_pb(pb_file_path)
+        pb_file_path = os.path.join(model_dir, 'classify.pb')
+        self.sess, self.input_node,self.input_mask_node, self.output_node = BaseClassifyModel.load_model_from_pb(pb_file_path)
 
 
         self.labels_list = []
@@ -28,12 +27,7 @@ class Meta_Load():
 
 
         self.vocabulary_dict = {value:index for index,value in enumerate(self.vocabulary_list) }
-        self.id_2_labels = {index:value for index,value in enumerate(self.labels_list)}
-        self.use_IBOES = False
-        for item in self.labels_list:
-            if "E-" in item:
-                self.use_IBOES = True
-                break
+
 
 
     def pad_sentence(self,sentence, max_sentence,vocabulary):
@@ -62,9 +56,12 @@ class Meta_Load():
         tokens_mask = np.array(tokens_mask).reshape((1,self.max_sentence_length))
 
         predict_ids = self.sess.run(self.output_node, feed_dict={self.input_node: tokens,self.input_mask_node:tokens_mask})
-        predict_ids  = predict_ids[0].tolist()[1:len(words) -1]
+        probality  = predict_ids[0].tolist()
+        predit_id = np.argmax(probality).tolist()
+        intent_dict = {}
+        intent_dict['name'] = self.labels_list[predit_id]
+        intent_dict['confidence'] = probality[predit_id]
+        return probality,intent_dict
 
 
-        if self.use_IBOES:
-            entity = result_to_json_IBOES(text,[self.id_2_labels[i] for i in predict_ids])
-            return  entity
+

@@ -189,14 +189,6 @@ class BatchManager(object):
         self.len_data = len(self.batch_data)
 
 
-    def sort_and_pad(self, data):
-        num_batch = int(math.ceil(len(data) /batch_size))
-        sorted_data = sorted(data, key=lambda x: len(x[0]))
-        batch_data = list()
-        for i in range(num_batch):
-            batch_data.append(self.pad_data(sorted_data[i*batch_size: (i+1)*batch_size], self.batcher))
-        return batch_data
-
     @staticmethod
     def pad_data(data, batcher):
         strings = []
@@ -360,19 +352,21 @@ def result_to_json_IBOES(string, tags):
         "entities": []
     }
     entity_name = ""
-    entity_start = 0
+    entity_start = -1
     current_entity_type = ""
     idx = 0
     for char, tag in zip(string, tags):
 
         if current_entity_type != "" and tag != "O":
-            new_entity_type = tag.replace("B-", "").replace("I-", "").replace("E-","")
+            new_entity_type = tag.replace("B-", "").replace("I-", "").replace("E-","").replace("S-","")
             if new_entity_type != current_entity_type:
                 item["entities"].append(
-                    {"value": entity_name, "start": entity_start, "end": idx, "entity": current_entity_type})
+                    {"value": entity_name, "start": entity_start, "end": idx-1, "entity": current_entity_type})
                 entity_name = ""
-                entity_start = 0
+                entity_start = -1
                 current_entity_type = ""
+
+
         if tag[0] == "B":
             entity_name += char
             entity_start = idx
@@ -386,30 +380,31 @@ def result_to_json_IBOES(string, tags):
             item["entities"].append(
                 {"value": entity_name, "start": entity_start, "end": idx, "entity": current_entity_type})
             entity_name = ""
-            entity_start = 0
+            entity_start = -1
             current_entity_type = ""
         elif tag[0] == 'S':
             entity_name = char
-            entity_start = idx
             current_entity_type = tag.replace("S-", "")
             item["entities"].append(
-                {"value": entity_name, "start": entity_start, "end": idx - 1, "entity": current_entity_type})
+                {"value": entity_name, "start": idx, "end": idx  , "entity": current_entity_type})
+
+
             entity_name = ""
-            entity_start = 0
+            entity_start = -1
             current_entity_type = ""
         else:
-            if current_entity_type != "":
+            if current_entity_type != "" and entity_start != -1:
                 item["entities"].append(
-                    {"value": entity_name, "start": entity_start, "end": idx - 1, "entity": current_entity_type})
+                    {"value": entity_name, "start": entity_start, "end": idx -1 , "entity": current_entity_type})
             entity_name = ""
-            entity_start = 0
+            entity_start = -1
             current_entity_type = ""
 
         idx += 1
 
-    if current_entity_type != "":
+    if current_entity_type != "" and entity_start != -1:
         item["entities"].append(
-            {"value": entity_name, "start": entity_start, "end": idx - 1, "entity": current_entity_type})
+            {"value": entity_name, "start": entity_start, "end": idx + 1, "entity": current_entity_type})
     return item
 
 

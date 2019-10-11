@@ -5,13 +5,13 @@ import os
 
 import argparse
 
-from rasa_nlu_third.tf_models.ner.params import Params
-from rasa_nlu_third.tf_models.ner.bilstm import BiLSTM
+from rasa_nlu_third.tf_models.classifiers.params import Params
+from rasa_nlu_third.tf_models.classifiers.classify_bilstm_model import ClassifyBilstmModel
 import tensorflow as tf
 import tqdm
 from sklearn.metrics import f1_score
-from rasa_nlu_third.data_process.ner.data_loader import RasaData
-from rasa_nlu_third.data_process.ner.tf_record_util import input_fn,make_tfrecord_files
+from rasa_nlu_third.data_process.classify.data_loader import RasaData
+from rasa_nlu_third.data_process.classify.tf_record_util import input_fn,make_tfrecord_files
 
 
 
@@ -25,6 +25,7 @@ def argument_parser():
     parser.add_argument('--use_bert', type=int, default="0", help="是否使用bert模型")
     #parser.add_argument('--use_bert',action='store_true',help='是否使用bert')
     parser.add_argument('--bert_model_path',type=str,help='bert模型目录')
+    parser.add_argument('--dictionary_path', type=str,default="", help='自定义词库')
 
     parser.add_argument('--max_sentence_length', type=int,default=20, help='一句话的最大长度')
     return parser.parse_args()
@@ -43,7 +44,7 @@ def train(params):
         raise NotImplementedError("还没有实现")
         #data_processer = data_process.NormalData(params.origin_data, output_path=params.output_path)
     else:
-        data_processer = RasaData(params.origin_data, output_path=params.output_path,tag_schema=params.tag_schema)
+        data_processer = RasaData(params.origin_data, output_path=params.output_path,jieba_dict_path=params.dictionary_path)
 
     vocab, vocab_list, labels = data_processer.load_vocab_and_labels()
 
@@ -67,11 +68,11 @@ def train(params):
                                                          max_sentence_length=params.max_sentence_length,
                                                          )
 
-            ner_model = BiLSTM(params)
-            loss, global_step, train_op, merger_op = ner_model.make_train(input_x=tfrecord_input['input_ids'], input_y=tfrecord_input['label_ids'],use_tfrecord=True)
+            classify_model = ClassifyBilstmModel(params)
+            loss, global_step, train_op, merger_op = classify_model.make_train(input_x=tfrecord_input['input_ids'], input_y=tfrecord_input['label_ids'],use_tfrecord=True)
             # 初始化所有变量
             saver = tf.train.Saver(tf.global_variables(), max_to_keep=5)
-            ner_model.model_restore(sess, saver)
+            classify_model.model_restore(sess, saver)
 
             best_f1 = 0
             for _ in tqdm.tqdm(range(params.total_train_steps), desc="steps", miniters=10):
@@ -82,7 +83,7 @@ def train(params):
                                                           batch_size=params.batch_size,
                                                           max_sentence_length=params.max_sentence_length,
                                                           mode=tf.estimator.ModeKeys.EVAL)
-                    loss_test, predict_test,sentence_length = ner_model.make_test(input_x=tfrecord_input_test['input_ids'], input_y=tfrecord_input_test['label_ids'],use_tfrecord=True)
+                    loss_test, predict_test = classify_model.make_test(input_x=tfrecord_input_test['input_ids'], input_y=tfrecord_input_test['label_ids'],use_tfrecord=True)
 
                     predict_var = []
                     train_y_var = []
@@ -90,13 +91,12 @@ def train(params):
                     num_batch = 0
                     try:
                         while 1:
-                            loss_, predict_, test_input_y_,length = sess.run([loss_test, predict_test, tfrecord_input_test['label_ids'],sentence_length])
+                            loss_, predict_, test_input_y_ = sess.run([loss_test, predict_test, tfrecord_input_test['label_ids']])
                             loss_total += loss_
                             num_batch += 1
-                            for p_,t_,len_ in zip(predict_.tolist(),test_input_y_.tolist(),length.tolist()):
 
-                                predict_var += p_[:len_]
-                                train_y_var += t_[:len_]
+                            predict_var += predict_.tolist()
+                            train_y_var += test_input_y_.tolist()
                     except tf.errors.OutOfRangeError:
                         print("eval over")
                     if num_batch > 0:
@@ -109,7 +109,7 @@ def train(params):
                             print("new best f1: %s ,save to dir:%s" % (f1_val, params.output_path))
                             best_f1 = f1_val
 
-            return ner_model.make_pb_file(params.output_path),vocab_list, labels
+            return classify_model.make_pb_file(params.output_path),vocab_list, labels
 
 
 

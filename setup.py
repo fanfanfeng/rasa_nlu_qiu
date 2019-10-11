@@ -5,7 +5,7 @@ from distutils.core import setup
 from setuptools import  find_packages
 setup(
     name='rasa_nlu_third',
-    version='0.1.3',
+    version='0.1.4',
     description='rasa nlu模块扩展',
     author='qiufengfeng',
     author_email='544855237@qq.com',

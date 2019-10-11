@@ -23,15 +23,16 @@ class BasicNerModel():
                 )
 
             self.bert_config = bert_config
-        self.input_x = None
+        self.input_initialization = False
 
     def create_placeholder(self):
-        if self.input_x == None:
+        if self.input_initialization == False:
             self.input_x = tf.placeholder(dtype=tf.int32, shape=[None, self.params.max_sentence_length], name=constant.INPUT_NODE_NAME)
             self.input_y = tf.placeholder(dtype=tf.int32, shape=[None,self.params.max_sentence_length], name="Targets")
             self.dropout = tf.placeholder_with_default(self.params.dropout_prob,(), name='dropout')
             self.input_mask = tf.placeholder(dtype=tf.int32, shape=[None], name=constant.INPUT_MASK_NAME)
             self.input_segment = tf.placeholder(dtype=tf.int32, shape=[None],name='segment')
+            self.input_initialization = True
         return self.input_x,self.input_y,self.dropout,self.input_mask,self.input_segment
 
 
@@ -173,7 +174,7 @@ class BasicNerModel():
                     raise FileNotFoundError("模型文件未找到")
 
                 output_graph_with_weight = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def, [
-                    constant.OUTPUT_NODE_NAME])
+                    constant.OUTPUT_NODE_NAME,constant.INPUT_MASK_NAME])
 
                 with tf.gfile.GFile(os.path.join(model_dir,'ner.pb'),'wb') as gf:
                     gf.write(output_graph_with_weight.SerializeToString())
@@ -193,7 +194,7 @@ class BasicNerModel():
             tf.import_graph_def(graph_def, name="")
 
         input_node = sess.graph.get_operation_by_name(constant.INPUT_NODE_NAME).outputs[0]
-        input_node_mask = sess.graph.get_operation_by_name(constant.INPUT_NODE_NAME).outputs[0]
+        input_node_mask = sess.graph.get_operation_by_name(constant.INPUT_MASK_NAME).outputs[0]
         predict_node = sess.graph.get_operation_by_name(constant.OUTPUT_NODE_NAME).outputs[0]
         return sess, input_node,input_node_mask, predict_node
 

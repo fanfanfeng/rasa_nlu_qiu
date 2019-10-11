@@ -1,4 +1,5 @@
 # create by fanfan on 2019/9/24 0024
+import jieba
 def full_to_half(s):
     """
     Convert full-width character to half-width one 
@@ -54,3 +55,20 @@ def replace_html(s):
     s = s.replace("&mdash;","")
     s = s.replace("\xa0", " ")
     return(s)
+
+
+def load_jieba_usedict(user_dict_path):
+    jieba.load_userdict(user_dict_path)
+
+
+def jieba_tokenlization(text):
+    return list(jieba.cut(text))
+
+def white_space_tokenlization(text):
+    return text.split(" ")
+
+
+
+
+
+
